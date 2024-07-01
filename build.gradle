@@ -1,0 +1,87 @@
+plugins {
+    id 'java'
+}
+
+group = 'org.example'
+version = '1.0-SNAPSHOT'
+
+sourceSets {
+    main {
+        java {
+            srcDirs 'src/main/java'
+        }
+        resources {
+            srcDirs 'src/main/resources'
+        }
+    }
+
+    agent {
+        java {
+            srcDirs 'src/agent/java'
+        }
+        resources {
+            srcDirs 'src/agent/resources'
+        }
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    agentImplementation group: 'org.ow2.asm', name: 'asm', version: '9.6'
+    agentImplementation 'commons-io:commons-io:2.15.1'
+    agentImplementation group: 'com.google.guava', name: 'guava', version: '33.0.0-jre'
+
+    implementation group: 'org.ow2.asm', name: 'asm', version: '9.6'
+    implementation 'commons-io:commons-io:2.15.1'
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(19)
+    }
+}
+
+compileJava {
+    options.compilerArgs << '-g'
+
+    if (JavaVersion.current() != JavaVersion.VERSION_19) {
+        throw new GradleException("This build must be run with Java 19")
+    }
+}
+
+compileAgentJava {
+}
+
+jar {
+    manifest {
+        attributes 'Main-Class': 'org.example.Main'
+    }
+}
+
+task buildAgentJar(type: Jar) {
+    manifest {
+        attributes 'Premain-Class': 'com.agent.Agent'
+    }
+    from(sourceSets.agent.output)
+}
+
+task runDebuggerExample(type: JavaExec) {
+    classpath = files(jar.archiveFile.get().asFile.getAbsolutePath())
+    classpath += sourceSets.main.runtimeClasspath
+    mainClass = "org.example.DebuggerExample"
+    jvmArgs "-javaagent:${buildAgentJar.archiveFile.get().asFile}"
+}
+
+tasks.withType(JavaExec).each {task -> configure(task) {
+    group = "debug Examples"
+}}
+
+runDebuggerExample.dependsOn(build)
+build.dependsOn(buildAgentJar)
+
+test {
+    useJUnitPlatform()
+}
